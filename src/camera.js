@@ -1,7 +1,7 @@
 const { mat4, vec3, vec4 } = glMatrix
 
 class Camera {
-    constructor({target = [0, 0, 0], up = [0, 1, 0], camera = [], defaultCameraMode} = {}) {
+    constructor({target = [0, 0, 0], up = [0, 1, 0], camera = [], defaultCameraMode = 'orbit'} = {}) {
         this.target = [...target] // Position of look-at target
         this.up = [...up]         // Up vector
 
@@ -36,8 +36,8 @@ class Camera {
             KeyS: false,
             KeyA: false,
             KeyD: false,
-            ShiftLeft: false,
-            Space: false
+            KeyQ: false,
+            KeyE: false
         }
 
         // Helper vectors
@@ -55,61 +55,105 @@ class Camera {
         // Matrices sent to the GPU
         this.vm = mat4.create()
         this.vpm = mat4.create()
+        
+        // Prevent default context menu on right-click
+        gl.canvas.addEventListener('contextmenu', e => {
+            e.preventDefault();
+        });
 
-        // Rotate camera around target (mouse)
+
+        // Rotate camera around target (mouse)鼠标
         gl.canvas.addEventListener('mousemove', e => {
             if (!e.buttons || this.disableMovement) return
-
-            this.theta -= e.movementX * 0.01 * .5
-            this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + e.movementY * 0.01 * .5))
-            this.isDragging = true
-
-            requestRender()
+            if (e.buttons === 1){
+                console.log('1111')
+                this.theta -= e.movementX * 0.01 * .5
+                this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + e.movementY * 0.01 * .5))
+                this.isDragging = true
+                requestRender()}
+            if (e.buttons === 2){
+                // this.theta -= e.movementX * 0.01 * .5
+                // this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + e.movementY * 0.01 * .5))
+                const front = this.getFront()
+                const right = vec3.cross(this.right, front, this.up)
+                // vec3.add(this.target, this.target, vec3.scale(front, front, settings.speed))
+                vec3.add(this.target, this.target, vec3.scale(right, right, e.movementX * 0.01 * .5))
+                vec3.add(this.target, this.target, vec3.scale(front, front, e.movementY * 0.01 * .25))
+                vec3.subtract(this.target, this.target, vec3.scale(vec3.create(), this.up, e.movementY * 0.01 * .25))
+                this.isDragging = true
+                requestRender()}
         })
 
-        // Rotate camera around target (touch)
+        // Rotate camera around target (touch)触控
         const lastTouch = {}
         gl.canvas.addEventListener('touchstart', e => {
             e.preventDefault()
             if (e.touches.length == 0 || this.disableMovement) return
-
-            lastTouch.clientX = e.touches[0].clientX
-            lastTouch.clientY = e.touches[0].clientY
+            if (e.buttons === 1){
+                lastTouch.clientX = e.touches[0].clientX
+                lastTouch.clientY = e.touches[0].clientY}
+            if (e.buttons === 2){
+                console.log('2222')
+                lastTouch.clientX = e.touches[0].clientX
+                lastTouch.clientY = e.touches[0].clientY}
+            
         })
         gl.canvas.addEventListener('touchmove', e => {
             e.preventDefault()
             if (e.touches.length == 0 || this.disableMovement) return
+            if (e.buttons === 1){
+                const touch = e.touches[0]
+                const movementX = touch.clientX - lastTouch.clientX
+                const movementY = touch.clientY - lastTouch.clientY
+                lastTouch.clientX = touch.clientX
+                lastTouch.clientY = touch.clientY
 
-            const touch = e.touches[0]
-            const movementX = touch.clientX - lastTouch.clientX
-            const movementY = touch.clientY - lastTouch.clientY
-            lastTouch.clientX = touch.clientX
-            lastTouch.clientY = touch.clientY
+                this.theta -= movementX * 0.01 * .5 * .3
+                this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + movementY * 0.01 * .5))}
 
-            this.theta -= movementX * 0.01 * .5 * .3
-            this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + movementY * 0.01 * .5))
+            if (e.buttons === 2){
+                console.log('333333')
+                const touch = e.touches[0]
+                const movementX = touch.clientX - lastTouch.clientX
+                const movementY = touch.clientY - lastTouch.clientY
+                lastTouch.clientX = touch.clientX
+                lastTouch.clientY = touch.clientY
+    
+                this.theta -= movementX * 0.01 * .5 * .3
+                this.phi = Math.max(1e-6, Math.min(Math.PI - 1e-6, this.phi + movementY * 0.01 * .5))}
+    
+                requestRender()
 
-            requestRender()
+
+
         })
+
 
         // Zoom in and out
         gl.canvas.addEventListener('wheel', e => {
-            if (this.freeFly || this.disableMovement) return
-
-            this.radius = Math.max(1, this.radius + e.deltaY * 0.01)
+            if (this.disableMovement) return
+            
+            if (this.freeFly) {
+                // Adjust target position in free-fly mode
+                const front = this.getFront()
+                vec3.add(this.target, this.target, vec3.scale(front, front, -e.deltaY * 0.05 * settings.speed))
+            } else {
+                // Adjust radius in orbit mode
+                this.radius = Math.max(1, this.radius + e.deltaY * 0.01)
+            }
 
             requestRender()
         })
 
         // Free-fly movement
         document.addEventListener('keydown', e => {
-            if (!this.freeFly || this.disableMovement || this.keyStates[e.code] == null) 
+            if (this.disableMovement || this.keyStates[e.code] == null) 
                 return
             this.keyStates[e.code] = true
         })
 
         document.addEventListener('keyup', e => {
-            if (!this.freeFly || this.disableMovement || this.keyStates[e.code] == null) 
+            if (this.disableMovement || this.keyStates[e.code] == null) 
                 return
             this.keyStates[e.code] = false
         })
@@ -130,7 +174,7 @@ class Camera {
     }
 
     // Reset parameters on new scene load
-    setParameters({target = [0, 0, 0], up = [0, 1, 0], camera = [], defaultCameraMode} = {}) {
+    setParameters({target = [0, 0, 0], up = [0, 1, 0], camera = [], defaultCameraMode = 'orbit'} = {}) {
         this.target = [...target]
         this.up = [...up]
         this.theta  = camera[0] ?? -Math.PI/2
@@ -152,8 +196,8 @@ class Camera {
         if (this.keyStates.KeyS) vec3.subtract(this.target, this.target, vec3.scale(front, front, settings.speed))
         if (this.keyStates.KeyA) vec3.add(this.target, this.target, vec3.scale(right, right, settings.speed))
         if (this.keyStates.KeyD) vec3.subtract(this.target, this.target, vec3.scale(right, right, settings.speed))
-        if (this.keyStates.ShiftLeft) vec3.add(this.target, this.target, vec3.scale(vec3.create(), this.up, settings.speed))
-        if (this.keyStates.Space) vec3.subtract(this.target, this.target, vec3.scale(vec3.create(), this.up, settings.speed))
+        if (this.keyStates.KeyQ) vec3.add(this.target, this.target, vec3.scale(vec3.create(), this.up, settings.speed))
+        if (this.keyStates.KeyE) vec3.subtract(this.target, this.target, vec3.scale(vec3.create(), this.up, settings.speed))
 
         requestRender()
     }

@@ -122,8 +122,9 @@ async function loadScene({scene, file}) {
 
     // Create a StreamableReader from a URL Response object
     if (scene != null) {
-        scene = scene.split('(')[0].trim()
-        const url = `https://huggingface.co/kishimisu/3d-gaussian-splatting-webgl/resolve/main/${scene}.ply`
+        // scene = scene.split('(')[0].trim()
+        // const url = `https://huggingface.co/kishimisu/3d-gaussian-splatting-webgl/resolve/main/${scene}.ply`
+        url = null
         const response = await fetch(url)
         contentLength = parseInt(response.headers.get('content-length'))
         reader = response.body.getReader()
